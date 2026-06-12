@@ -1,0 +1,32 @@
+{
+  "model_id": "credit_risk_20260612T023706Z",
+  "created_utc": "20260612T023706Z",
+  "package_version": "0.1.0",
+  "python": "3.10.8",
+  "features": [
+    "age",
+    "annual_income",
+    "loan_amount",
+    "loan_term_months",
+    "interest_rate",
+    "debt_to_income",
+    "credit_utilization",
+    "num_open_accounts",
+    "num_delinquencies",
+    "months_employed",
+    "home_ownership",
+    "loan_purpose"
+  ],
+  "artifact": "credit_risk_20260612T023706Z.joblib",
+  "metrics": {
+    "roc_auc": 0.7909472717987972,
+    "pr_auc": 0.6941380376274904,
+    "precision": 0.6778063410454156,
+    "recall": 0.5266311584553928,
+    "f1": 0.5927313600599475,
+    "brier": 0.17730914456309513,
+    "n_train": 16000,
+    "n_test": 4000,
+    "default_rate": 0.3755
+  }
+}
