@@ -21,6 +21,17 @@ app = FastAPI(
 )
 
 
+@app.get("/")
+def root() -> dict:
+    """Service metadata and a map of available endpoints."""
+    return {
+        "service": "Credit Risk Scoring API",
+        "version": __version__,
+        "docs": "/docs",
+        "endpoints": ["/health", "/model/info", "/predict", "/predict/batch"],
+    }
+
+
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok", "version": __version__}
