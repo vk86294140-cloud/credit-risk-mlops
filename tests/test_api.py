@@ -50,3 +50,11 @@ def test_predict_batch(client, sample_application):
     )
     assert resp.status_code == 200
     assert len(resp.json()["predictions"]) == 2
+
+
+def test_root(client):
+    resp = client.get("/")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["service"] == "Credit Risk Scoring API"
+    assert "/predict" in body["endpoints"]
