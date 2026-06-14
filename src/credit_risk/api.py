@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from fastapi import FastAPI, HTTPException
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 
 from . import __version__
 from .model import ModelNotFoundError, get_model
@@ -20,22 +22,17 @@ app = FastAPI(
     "credit_risk pipeline.",
 )
 
+# Serve static files (frontend)
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
-@app.get("/")
-def root() -> dict:
-    """Service metadata and a map of available endpoints."""
-    return {
-        "service": "Credit Risk Scoring API",
-        "version": __version__,
-        "docs": "/docs",
-        "endpoints": ["/health", "/model/info", "/predict", "/predict/batch"],
-    }
-
+@app.get("/", response_class=FileResponse)
+def root() -> FileResponse:
+    """Serve the demo UI."""
+    return FileResponse("static/index.html")
 
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok", "version": __version__}
-
 
 @app.get("/model/info")
 def model_info() -> dict:
@@ -45,7 +42,6 @@ def model_info() -> dict:
         raise HTTPException(status_code=503, detail=str(exc))
     return model.manifest
 
-
 @app.post("/predict", response_model=PredictionResponse)
 def predict(application: CreditApplication) -> PredictionResponse:
     try:
@@ -54,7 +50,6 @@ def predict(application: CreditApplication) -> PredictionResponse:
         raise HTTPException(status_code=503, detail=str(exc))
     result = model.predict_one(application.model_dump())
     return PredictionResponse(**result)
-
 
 @app.post("/predict/batch", response_model=BatchResponse)
 def predict_batch(request: BatchRequest) -> BatchResponse:
