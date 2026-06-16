@@ -26,6 +26,7 @@ from sklearn.metrics import (
     recall_score,
     roc_auc_score,
 )
+from sklearn.inspection import permutation_importance
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 
@@ -81,6 +82,36 @@ def evaluate(pipeline: Pipeline, X_test, y_test, n_train: int) -> Metrics:
     )
 
 
+def feature_importances(
+    pipeline: Pipeline, X_test, y_test, n_repeats: int = 5
+) -> list[dict[str, float]]:
+    """Permutation importance per *original* input feature, ranked high to low.
+
+    Permuting the raw input columns (rather than the post-one-hot columns) keeps
+    the attribution interpretable for an auditor: it answers "how much does the
+    model's ROC-AUC drop when this application field is shuffled?". HistGradient-
+    BoostingClassifier exposes no native `feature_importances_`, so this is the
+    model-agnostic way to surface what actually drives the score.
+    """
+    result = permutation_importance(
+        pipeline,
+        X_test,
+        y_test,
+        n_repeats=n_repeats,
+        random_state=RANDOM_SEED,
+        scoring="roc_auc",
+    )
+    ranked = sorted(
+        zip(ALL_FEATURES, result.importances_mean, result.importances_std),
+        key=lambda kv: kv[1],
+        reverse=True,
+    )
+    return [
+        {"feature": f, "importance": round(float(mean), 5), "std": round(float(std), 5)}
+        for f, mean, std in ranked
+    ]
+
+
 def train(
     data_path: str | Path | None = None,
     n_rows: int = 20_000,
@@ -100,6 +131,7 @@ def train(
     pipeline = build_model()
     pipeline.fit(X_train, y_train)
     metrics = evaluate(pipeline, X_test, y_test, n_train=len(X_train))
+    importances = feature_importances(pipeline, X_test, y_test)
 
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     model_dir = Path(model_dir)
@@ -115,6 +147,7 @@ def train(
         "features": ALL_FEATURES,
         "artifact": artifact_path.name,
         "metrics": asdict(metrics),
+        "feature_importances": importances,
     }
 
     # Persist run metrics next to the artifact, and update the `latest` pointer
