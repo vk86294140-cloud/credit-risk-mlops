@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from fastapi import FastAPI, HTTPException
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 
 from . import __version__
 from .model import ModelNotFoundError, get_model
@@ -20,6 +22,8 @@ app = FastAPI(
     "credit_risk pipeline.",
 )
 
+# Serve static files (frontend)
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.get("/")
 def root() -> dict:
@@ -41,7 +45,6 @@ def root() -> dict:
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok", "version": __version__}
-
 
 @app.get("/model/info")
 def model_info() -> dict:
@@ -87,7 +90,6 @@ def predict(application: CreditApplication) -> PredictionResponse:
         raise HTTPException(status_code=503, detail=str(exc))
     result = model.predict_one(application.model_dump())
     return PredictionResponse(**result)
-
 
 @app.post("/predict/batch", response_model=BatchResponse)
 def predict_batch(request: BatchRequest) -> BatchResponse:
