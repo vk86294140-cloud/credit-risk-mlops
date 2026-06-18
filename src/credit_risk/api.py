@@ -25,10 +25,22 @@ app = FastAPI(
 # Serve static files (frontend)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-@app.get("/", response_class=FileResponse)
-def root() -> FileResponse:
-    """Serve the demo UI."""
-    return FileResponse("static/index.html")
+@app.get("/")
+def root() -> dict:
+    """Service metadata and a map of available endpoints."""
+    return {
+        "service": "Credit Risk Scoring API",
+        "version": __version__,
+        "docs": "/docs",
+        "endpoints": [
+            "/health",
+            "/model/info",
+            "/model/importance",
+            "/predict",
+            "/predict/batch",
+        ],
+    }
+
 
 @app.get("/health")
 def health() -> dict:
@@ -41,6 +53,34 @@ def model_info() -> dict:
     except ModelNotFoundError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
     return model.manifest
+
+
+@app.get("/model/importance")
+def model_importance() -> dict:
+    """Permutation feature importance for the live model, ranked high to low.
+
+    Surfaces which application fields drive the risk score — useful for model
+    audits and adverse-action reasoning. Populated at training time; older
+    artifacts without it return 503 until retrained.
+    """
+    try:
+        model = get_model()
+    except ModelNotFoundError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    importances = model.manifest.get("feature_importances")
+    if not importances:
+        raise HTTPException(
+            status_code=503,
+            detail="This model artifact predates feature-importance tracking; "
+            "retrain (`make train`) to populate it.",
+        )
+    return {
+        "model_id": model.manifest["model_id"],
+        "scoring": "roc_auc",
+        "method": "permutation_importance",
+        "feature_importances": importances,
+    }
+
 
 @app.post("/predict", response_model=PredictionResponse)
 def predict(application: CreditApplication) -> PredictionResponse:
