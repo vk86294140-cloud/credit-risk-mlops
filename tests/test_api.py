@@ -58,3 +58,17 @@ def test_root(client):
     body = resp.json()
     assert body["service"] == "Credit Risk Scoring API"
     assert "/predict" in body["endpoints"]
+    assert "/model/importance" in body["endpoints"]
+
+
+def test_model_importance(client):
+    resp = client.get("/model/importance")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["method"] == "permutation_importance"
+    imps = body["feature_importances"]
+    assert imps, "expected a non-empty importance list"
+    # Ranked high to low, and every entry is fully described.
+    means = [row["importance"] for row in imps]
+    assert means == sorted(means, reverse=True)
+    assert all({"feature", "importance", "std"} <= row.keys() for row in imps)
