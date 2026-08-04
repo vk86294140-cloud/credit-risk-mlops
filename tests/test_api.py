@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import copy
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -72,3 +74,38 @@ def test_model_importance(client):
     means = [row["importance"] for row in imps]
     assert means == sorted(means, reverse=True)
     assert all({"feature", "importance", "std"} <= row.keys() for row in imps)
+
+
+def _batch(sample_application: dict, n: int = 40) -> list[dict]:
+    """A batch large enough to satisfy the endpoint's minimum sample size."""
+    return [dict(sample_application) for _ in range(n)]
+
+
+def test_drift_endpoint_reports_per_feature_psi(client, sample_application):
+    resp = client.post("/monitor/drift", json={"applications": _batch(sample_application)})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["n_rows"] == 40
+    assert body["verdict"] in {"stable", "moderate", "significant"}
+    assert {f["feature"] for f in body["features"]}
+    # Forty identical applications are a degenerate distribution by
+    # construction, so the monitor had better say so.
+    assert body["max_psi"] > 0.25
+
+
+def test_drift_endpoint_rejects_a_batch_too_small_to_be_meaningful(client, sample_application):
+    resp = client.post("/monitor/drift", json={"applications": _batch(sample_application, n=5)})
+    assert resp.status_code == 422
+
+
+def test_drift_endpoint_503s_on_an_artifact_without_a_reference_profile(
+    model, monkeypatch, sample_application
+):
+    """Older artifacts predate the reference profile; say so rather than 500."""
+    legacy = copy.copy(model)
+    legacy.manifest = {k: v for k, v in model.manifest.items() if k != "reference_profile"}
+    monkeypatch.setattr(api_module, "get_model", lambda: legacy)
+    client = TestClient(app)
+    resp = client.post("/monitor/drift", json={"applications": _batch(sample_application)})
+    assert resp.status_code == 503
+    assert "retrain" in resp.json()["detail"]

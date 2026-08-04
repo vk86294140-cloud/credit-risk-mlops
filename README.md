@@ -29,6 +29,10 @@ data ──► features ──► train + evaluate ──► versioned artifact 
   audit trail without a heavyweight platform.
 - **Schema-validated API** — Pydantic v2 request/response contracts; invalid
   payloads get a clean `422`. Auto-generated OpenAPI docs at `/docs`.
+- **Drift monitoring built in** — training captures a reference distribution
+  into the manifest, and `/monitor/drift` scores live batches against it with
+  PSI. Default labels arrive months late; the input distribution is observable
+  now — see [Drift monitoring](#drift-monitoring).
 - **Containerized + CI** — image trains a model at build time and smoke-tests
   `/health`; GitHub Actions runs the test matrix and the container smoke test.
 
@@ -81,11 +85,56 @@ Interactive docs: open `http://localhost:8000/docs`.
 | `GET` | `/model/importance` | permutation feature importance, ranked |
 | `POST` | `/predict` | score one application |
 | `POST` | `/predict/batch` | score many applications |
+| `POST` | `/monitor/drift` | compare a live batch against the training distribution |
 
 `/model/importance` answers "which application fields move the score?" — the
 ROC-AUC drop when each field is permuted on the held-out set, computed at
 training time and served from the model manifest. Useful for audits and
 adverse-action reasoning on a credit model.
+
+## Drift monitoring
+
+A credit model doesn't fail loudly. It fails because the applications stopped
+looking like the ones it was fitted on — and you can't measure that with
+accuracy, because whether a loan defaults is known months after it was scored.
+
+What *is* observable on day one is the input distribution. Training captures a
+compact reference profile (quantile bin edges and category shares) into the
+model manifest, and `/monitor/drift` scores a live batch against it with the
+Population Stability Index:
+
+```bash
+curl -s http://localhost:8000/monitor/drift -H "Content-Type: application/json"   -d '{"applications": [ ...at least 30 applications... ]}'
+```
+
+```json
+{
+  "model_id": "credit_risk_2026...",
+  "n_rows": 500,
+  "max_psi": 0.31,
+  "verdict": "significant",
+  "drifted_features": ["credit_utilization"],
+  "features": [
+    {"feature": "credit_utilization", "kind": "numeric", "psi": 0.31, "verdict": "significant"},
+    {"feature": "annual_income", "kind": "numeric", "psi": 0.04, "verdict": "stable"}
+  ]
+}
+```
+
+Bands follow the usual convention: `< 0.10` stable, `0.10–0.25` moderate,
+`>= 0.25` significant. Three details that make the number trustworthy rather
+than decorative:
+
+- **Quantile bins, not fixed-width bins.** Every reference bin starts equally
+  populated, so PSI reacts to a change in shape instead of to an arbitrary
+  choice of bin boundaries.
+- **Open-ended outer bins.** Values beyond the training min/max are exactly the
+  interesting ones; closed bins would drop them and hide the shift.
+- **The roll-up is the max, not the mean.** One badly drifted feature is a real
+  problem, and averaging it against nine stable ones is how drift gets missed.
+
+Unseen categories are folded into a single bucket and reported, so a new
+`home_ownership` value shows up as drift rather than being silently ignored.
 
 ## Run with Docker
 
@@ -104,6 +153,7 @@ src/credit_risk/
   features.py   ColumnTransformer (impute + scale + one-hot)
   train.py      train, evaluate, version artifact + metrics
   model.py      load latest artifact, score requests
+  drift.py      PSI drift monitor + reference profiling
   schema.py     Pydantic request/response contracts
   api.py        FastAPI app
 pipelines/

@@ -33,6 +33,7 @@ from sklearn.pipeline import Pipeline
 from . import __version__
 from .config import ALL_FEATURES, MODEL_DIR, RANDOM_SEED, TARGET, ensure_dirs
 from .data import load_dataset
+from .drift import build_reference
 from .features import build_preprocessor
 
 
@@ -132,6 +133,9 @@ def train(
     pipeline.fit(X_train, y_train)
     metrics = evaluate(pipeline, X_test, y_test, n_train=len(X_train))
     importances = feature_importances(pipeline, X_test, y_test)
+    # Captured from the training split, not the full frame: the reference
+    # has to describe the distribution the model actually learned.
+    reference = build_reference(X_train)
 
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     model_dir = Path(model_dir)
@@ -148,6 +152,7 @@ def train(
         "artifact": artifact_path.name,
         "metrics": asdict(metrics),
         "feature_importances": importances,
+        "reference_profile": reference,
     }
 
     # Persist run metrics next to the artifact, and update the `latest` pointer

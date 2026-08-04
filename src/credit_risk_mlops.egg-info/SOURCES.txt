@@ -5,6 +5,7 @@ src/credit_risk/__init__.py
 src/credit_risk/api.py
 src/credit_risk/config.py
 src/credit_risk/data.py
+src/credit_risk/drift.py
 src/credit_risk/features.py
 src/credit_risk/model.py
 src/credit_risk/schema.py
@@ -16,5 +17,6 @@ src/credit_risk_mlops.egg-info/requires.txt
 src/credit_risk_mlops.egg-info/top_level.txt
 tests/test_api.py
 tests/test_data.py
+tests/test_drift.py
 tests/test_model.py
 tests/test_train.py

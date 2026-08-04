@@ -7,11 +7,16 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
 from . import __version__
+import pandas as pd
+
+from .drift import population_stability_index
 from .model import ModelNotFoundError, get_model
 from .schema import (
     BatchRequest,
     BatchResponse,
     CreditApplication,
+    DriftRequest,
+    DriftResponse,
     PredictionResponse,
 )
 
@@ -38,6 +43,7 @@ def root() -> dict:
             "/model/importance",
             "/predict",
             "/predict/batch",
+            "/monitor/drift",
         ],
     }
 
@@ -100,3 +106,29 @@ def predict_batch(request: BatchRequest) -> BatchResponse:
     records = [a.model_dump() for a in request.applications]
     results = model.predict_many(records)
     return BatchResponse(predictions=[PredictionResponse(**r) for r in results])
+
+
+@app.post("/monitor/drift", response_model=DriftResponse)
+def monitor_drift(request: DriftRequest) -> DriftResponse:
+    """Score a live batch against the distribution the model was trained on.
+
+    Default labels arrive months after scoring, so accuracy cannot be measured
+    in production. The input distribution can be, immediately - this reports
+    per-feature Population Stability Index and flags the features that moved.
+    """
+    try:
+        model = get_model()
+    except ModelNotFoundError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+
+    reference = model.manifest.get("reference_profile")
+    if not reference:
+        raise HTTPException(
+            status_code=503,
+            detail="This model artifact predates drift monitoring; "
+            "retrain (`make train`) to capture a reference profile.",
+        )
+
+    frame = pd.DataFrame([a.model_dump() for a in request.applications])
+    report = population_stability_index(reference, frame)
+    return DriftResponse(model_id=model.manifest["model_id"], **report)

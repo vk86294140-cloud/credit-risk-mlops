@@ -36,3 +36,26 @@ class BatchRequest(BaseModel):
 
 class BatchResponse(BaseModel):
     predictions: List[PredictionResponse]
+
+
+class DriftRequest(BaseModel):
+    """A batch of live applications to compare against the training profile."""
+
+    applications: List[CreditApplication] = Field(..., min_length=30)
+
+
+class FeatureDrift(BaseModel):
+    feature: str
+    kind: Literal["numeric", "categorical"]
+    psi: float
+    verdict: Literal["stable", "moderate", "significant"]
+
+
+class DriftResponse(BaseModel):
+    model_id: str
+    n_rows: int
+    reference_rows: int
+    max_psi: float
+    verdict: Literal["stable", "moderate", "significant"]
+    drifted_features: List[str]
+    features: List[FeatureDrift]
